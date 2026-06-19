@@ -1,0 +1,39 @@
+#!/bin/sh
+set -eu
+
+if [ "${SKIP_SUBMODULE_RELEASE_HOOK:-0}" = "1" ]; then
+  exit 0
+fi
+
+if [ ! -f "version.json" ]; then
+  exit 0
+fi
+
+version="$(
+  sed -n 's/.*"version":[[:space:]]*"\([^"]*\)".*/\1/p' version.json | head -n 1
+)"
+
+if [ -z "$version" ]; then
+  exit 0
+fi
+
+tag="v${version}"
+
+if ! git rev-parse -q --verify "refs/tags/${tag}" >/dev/null 2>&1; then
+  git tag -a "$tag" -m "Release ${tag}"
+fi
+
+superproject="$(git rev-parse --show-superproject-working-tree 2>/dev/null || true)"
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+if [ -n "$superproject" ]; then
+  case "$repo_root" in
+    "$superproject"/*)
+      rel_path="${repo_root#"$superproject"/}"
+      if [ -n "$rel_path" ]; then
+        git -C "$superproject" add "$rel_path" >/dev/null 2>&1 || true
+        printf 'submodule-release: staged parent repo update for %s\n' "$rel_path"
+      fi
+      ;;
+  esac
+fi
